@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Flashcards App - V3</title>
+    <style>
+        :root {
+            --primary: #1DB954;
+            --bg: #121212;
+            --surface: #282828;
+            --text: #FFFFFF;
+            --text-sec: #B3B3B3;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden; /* Evita lo scroll orizzontale durante lo swipe */
+        }
+        .container {
+            width: 100%;
+            max-width: 650px;
+        }
+        nav {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--surface);
+            padding-bottom: 10px;
+        }
+        button {
+            background-color: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--text-sec);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background-color: #3e3e3e; }
+        button.active {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: black;
+            font-weight: bold;
+        }
+        .btn-action {
+            background-color: var(--primary);
+            color: black;
+            font-weight: bold;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 10px;
+        }
+        .section { display: none; }
+        .section.active { display: block; }
+        
+        textarea, input, select {
+            background-color: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--text-sec);
+            padding: 10px;
+            border-radius: 5px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        textarea, select { width: 100%; }
+        
+        .flashcard-container {
+            position: relative;
+            width: 100%;
+            margin-top: 20px;
+            perspective: 1000px;
+        }
+
+        .flashcard {
+            background-color: var(--surface);
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            border: 2px solid transparent;
+            /* touch-action: none impedisce al browser di scrollare la pagina quando fai swipe */
+            touch-action: none; 
+            transition: transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+            box-sizing: border-box;
+        }
+        .flashcard:hover { border-color: #404040; }
+        
+        .question { font-size: 1.5em; font-weight: bold; margin-bottom: 20px; pointer-events: none; }
+        .answer { font-size: 1.2em; color: var(--primary); display: none; margin-bottom: 20px; pointer-events: none; }
+        
+        .hint { font-size: 0.8em; color: var(--text-sec); margin-top: 10px; pointer-events: none; }
+        #fc-swipe-hint { display: none; font-weight: bold; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #3e3e3e; }
+        th { color: var(--text-sec); }
+        
+        .table-input {
+            background: transparent;
+            border: none;
+            border-bottom: 1px dashed #555;
+            color: var(--text);
+            padding: 4px;
+            width: 100%;
+            border-radius: 0;
+            margin-bottom: 0;
+        }
+        .table-input:focus {
+            border-bottom: 1px solid var(--primary);
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <nav>
+        <button id="tab-train" class="active" onclick="switchTab('train')">Allenamento</button>
+        <button id="tab-library" onclick="switchTab('library')">Libreria</button>
+        <button id="tab-stats" onclick="switchTab('stats')">Statistiche</button>
+    </nav>
+
+    <div id="sec-train" class="section active">
+        <h3>Impostazioni Sessione</h3>
+        <div style="display: flex; gap: 10px;">
+            <input type="number" id="filter-min" placeholder="Anno Min (es. 1960)" style="width: 50%;">
+            <input type="number" id="filter-max" placeholder="Anno Max (es. 2024)" style="width: 50%;">
+        </div>
+        <select id="train-mode">
+            <option value="year">Dato il Titolo ➔ Indovina l'Anno</option>
+            <option value="artist">Dato il Titolo ➔ Indovina l'Artista</option>
+            <option value="year_artist" selected>Dato il Titolo ➔ Indovina Anno e Artista</option>
+            <option value="title">Dati Anno e Artista ➔ Indovina il Titolo</option>
+        </select>
+        <button class="btn-action" onclick="startTraining()">Inizia Sessione</button>
+
+        <div class="flashcard-container">
+            <div class="flashcard" id="flashcard-ui" style="display: none;">
+                <div class="question" id="fc-question"></div>
+                <div class="answer" id="fc-answer"></div>
+                <div class="hint" id="fc-click-hint">💡 Clicca sulla carta per girarla</div>
+                <div class="hint" id="fc-swipe-hint">👈 Sbagliato (Swipe) Indovinato 👉</div>
+            </div>
+        </div>
+        <p id="train-status" style="text-align: center; color: var(--text-sec); margin-top: 15px;"></p>
+    </div>
+
+    <div id="sec-library" class="section">
+        <h3>Aggiunta Massiva</h3>
+        <p style="font-size: 0.9em; color: var(--text-sec);">Formato richiesto: <strong>Titolo; Artista; Anno</strong></p>
+        <textarea id="bulk-input" rows="4" placeholder="The Sound of Silence; Simon & Garfunkel; 1965&#10;Bohemian Rhapsody; Queen; 1975"></textarea>
+        <button class="btn-action" onclick="importSongs()">Importa Canzoni</button>
+        <button onclick="clearLibrary()" style="margin-left: 10px; border-color: #e91429; color: #e91429;">Svuota Tutto</button>
+        <p id="import-status"></p>
+
+        <h3 style="margin-top: 30px;">Gestione Canzoni</h3>
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Titolo</th>
+                        <th>Artista</th>
+                        <th>Anno</th>
+                        <th>Azione</th>
+                    </tr>
+                </thead>
+                <tbody id="library-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="sec-stats" class="section">
+        <h3>Performance Generali</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Canzone</th>
+                    <th>Corrette</th>
+                    <th>Sbagliate</th>
+                    <th>Precisione</th>
+                </tr>
+            </thead>
+            <tbody id="stats-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let library = JSON.parse(localStorage.getItem('music_library')) || [];
+    let sessionPool = [];
+    let currentSong = null;
+    let isFlipped = false;
+    
+    let sessionCorrect = 0;
+    let sessionIncorrect = 0;
+
+    // --- VARIABILI PER LO SWIPE ---
+    const flashcardEl = document.getElementById('flashcard-ui');
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+    const SWIPE_THRESHOLD = 100; // Pixel necessari per confermare lo swipe
+
+    // Gestione Eventi Touch (Mobile)
+    flashcardEl.addEventListener('touchstart', touchStart);
+    flashcardEl.addEventListener('touchmove', touchMove);
+    flashcardEl.addEventListener('touchend', touchEnd);
+
+    // Gestione Eventi Mouse (Desktop)
+    flashcardEl.addEventListener('mousedown', touchStart);
+    document.addEventListener('mousemove', touchMove);
+    document.addEventListener('mouseup', touchEnd);
+
+    // Click standard per girare la carta (solo se non è già girata)
+    flashcardEl.addEventListener('click', (e) => {
+        if (!currentSong || isFlipped) return;
+        
+        // Evita che un micro-trascinamento venga contato come click
+        if (Math.abs(currentX - startX) > 5) return; 
+        
+        isFlipped = true;
+        document.getElementById('fc-answer').style.display = 'block';
+        document.getElementById('fc-click-hint').style.display = 'none';
+        document.getElementById('fc-swipe-hint').style.display = 'block';
+    });
+
+    function getPositionX(event) {
+        return event.type.includes('mouse') ? event.pageX : event.touches[0].clientX;
+    }
+
+    function touchStart(event) {
+        // Lo swipe è permesso solo se la carta è già girata
+        if (!currentSong || !isFlipped) return; 
+        isDragging = true;
+        startX = getPositionX(event);
+        currentX = startX;
+        flashcardEl.style.transition = 'none'; // Rimuove animazioni durante il drag per massima fluidità
+    }
+
+    function touchMove(event) {
+        if (!isDragging) return;
+        currentX = getPositionX(event);
+        const diffX = currentX - startX;
+        
+        // Calcola rotazione e spostamento
+        const rotate = diffX * 0.05;
+        flashcardEl.style.transform = `translateX(${diffX}px) rotate(${rotate}deg)`;
+        
+        // Feedback visivo sul bordo
+        if (diffX > 50) {
+            flashcardEl.style.borderColor = "var(--primary)";
+        } else if (diffX < -50) {
+            flashcardEl.style.borderColor = "#e91429";
+        } else {
+            flashcardEl.style.borderColor = "transparent";
+        }
+    }
+
+    function touchEnd(event) {
+        if (!isDragging) return;
+        isDragging = false;
+        const diffX = currentX - startX;
+        
+        flashcardEl.style.transition = 'transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease';
+
+        if (diffX > SWIPE_THRESHOLD) {
+            // Swipe a destra: Indovinato
+            flashcardEl.style.transform = `translateX(${window.innerWidth}px) rotate(30deg)`;
+            flashcardEl.style.opacity = '0';
+            setTimeout(() => evaluateAnswer(true), 300);
+        } else if (diffX < -SWIPE_THRESHOLD) {
+            // Swipe a sinistra: Sbagliato
+            flashcardEl.style.transform = `translateX(-${window.innerWidth}px) rotate(-30deg)`;
+            flashcardEl.style.opacity = '0';
+            setTimeout(() => evaluateAnswer(false), 300);
+        } else {
+            // Ritorna al centro se lo swipe non è sufficiente
+            flashcardEl.style.transform = 'translateX(0) rotate(0)';
+            flashcardEl.style.borderColor = "transparent";
+        }
+    }
+
+
+    // --- FUNZIONI DI BASE (SALVATAGGIO E TAB) ---
+    function saveLibrary() {
+        localStorage.setItem('music_library', JSON.stringify(library));
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById(`sec-${tab}`).classList.add('active');
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        if (tab === 'library') renderLibrary();
+        if (tab === 'stats') renderStats();
+    }
+
+    // --- LOGICA LIBRERIA ---
+    function importSongs() {
+        const text = document.getElementById('bulk-input').value;
+        const lines = text.split('\n');
+        let count = 0;
+        
+        lines.forEach(line => {
+            const parts = line.split(';').map(p => p.trim());
+            if (parts.length >= 3) {
+                const exists = library.find(s => s.title.toLowerCase() === parts[0].toLowerCase() && s.artist.toLowerCase() === parts[1].toLowerCase());
+                if (!exists) {
+                    library.push({
+                        id: Date.now() + Math.random(),
+                        title: parts[0],
+                        artist: parts[1],
+                        year: parseInt(parts[2]) || 0,
+                        correct: 0,
+                        incorrect: 0
+                    });
+                    count++;
+                }
+            }
+        });
+        saveLibrary();
+        document.getElementById('import-status').innerText = `Aggiunte ${count} nuove canzoni.`;
+        document.getElementById('bulk-input').value = '';
+        renderLibrary();
+    }
+
+    function renderLibrary() {
+        const tbody = document.getElementById('library-body');
+        tbody.innerHTML = '';
+        if (library.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-sec);">Libreria vuota.</td></tr>';
+            return;
+        }
+        library.forEach((song, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" class="table-input" value="${song.title}" onchange="updateSong(${index}, 'title', this.value)"></td>
+                <td><input type="text" class="table-input" value="${song.artist}" onchange="updateSong(${index}, 'artist', this.value)"></td>
+                <td><input type="number" class="table-input" value="${song.year}" onchange="updateSong(${index}, 'year', this.value)"></td>
+                <td><button onclick="deleteSong(${index})" style="color:#e91429; border-color:#e91429; padding:4px 8px; border-radius:5px;">Elimina</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function updateSong(index, field, value) {
+        if (field === 'year') {
+            library[index][field] = parseInt(value) || 0;
+        } else {
+            library[index][field] = value.trim();
+        }
+        saveLibrary();
+    }
+
+    function deleteSong(index) {
+        library.splice(index, 1);
+        saveLibrary();
+        renderLibrary();
+    }
+
+    function clearLibrary() {
+        if(confirm('Sicuro di voler eliminare tutte le canzoni e le statistiche?')) {
+            library = [];
+            saveLibrary();
+            renderLibrary();
+        }
+    }
+
+    // --- LOGICA ALLENAMENTO ---
+    function startTraining() {
+        const minYear = parseInt(document.getElementById('filter-min').value) || 0;
+        const maxYear = parseInt(document.getElementById('filter-max').value) || 9999;
+        
+        let filtered = library.filter(s => s.year >= minYear && s.year <= maxYear);
+        
+        if (filtered.length === 0) {
+            document.getElementById('train-status').innerText = "Nessuna canzone trovata per questi filtri.";
+            flashcardEl.style.display = 'none';
+            return;
+        }
+
+        sessionPool = [...filtered].sort(() => Math.random() - 0.5);
+        sessionCorrect = 0;
+        sessionIncorrect = 0;
+        nextCard();
+    }
+
+    function nextCard() {
+        // Reset degli stili della carta dopo lo swipe
+        flashcardEl.style.transition = 'none';
+        flashcardEl.style.transform = 'translateX(0) rotate(0)';
+        flashcardEl.style.opacity = '1';
+        flashcardEl.style.borderColor = "transparent";
+        
+        // Forza il reflow per applicare subito i reset senza animazioni
+        void flashcardEl.offsetWidth; 
+        
+        // Riattiva le transizioni normali
+        flashcardEl.style.transition = 'transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease';
+
+        if (sessionPool.length === 0) {
+            document.getElementById('fc-question').innerText = "🎉 Allenamento Terminato!";
+            document.getElementById('fc-answer').innerHTML = `Risultati sessione:<br><span style="color:var(--primary)">✔ Indovinate: ${sessionCorrect}</span><br><span style="color:#e91429">✘ Sbagliate: ${sessionIncorrect}</span>`;
+            document.getElementById('fc-answer').style.display = 'block';
+            document.getElementById('fc-click-hint').style.display = 'none';
+            document.getElementById('fc-swipe-hint').style.display = 'none';
+            document.getElementById('train-status').innerText = "Hai completato tutte le canzoni nel pool scelto.";
+            currentSong = null;
+            return;
+        }
+
+        currentSong = sessionPool.pop();
+        document.getElementById('train-status').innerText = `Canzoni rimanenti in questa sessione: ${sessionPool.length + 1}`;
+        
+        const mode = document.getElementById('train-mode').value;
+        const qEl = document.getElementById('fc-question');
+        const aEl = document.getElementById('fc-answer');
+        
+        if (mode === 'year') {
+            qEl.innerText = currentSong.title;
+            aEl.innerText = currentSong.year;
+        } else if (mode === 'artist') {
+            qEl.innerText = currentSong.title;
+            aEl.innerText = currentSong.artist;
+        } else if (mode === 'year_artist') {
+            qEl.innerText = currentSong.title;
+            aEl.innerText = `${currentSong.artist} (${currentSong.year})`;
+        } else if (mode === 'title') {
+            qEl.innerText = `${currentSong.artist} - ${currentSong.year}`;
+            aEl.innerText = currentSong.title;
+        }
+
+        isFlipped = false;
+        document.getElementById('fc-answer').style.display = 'none';
+        document.getElementById('fc-click-hint').style.display = 'block';
+        document.getElementById('fc-swipe-hint').style.display = 'none';
+        flashcardEl.style.display = 'flex';
+        
+        // Resetta le coordinate di inizio per evitare falsi swipe al cambio carta
+        startX = 0;
+        currentX = 0;
+    }
+
+    function evaluateAnswer(isCorrect) {
+        if (isCorrect) sessionCorrect++;
+        else sessionIncorrect++;
+
+        const songIndex = library.findIndex(s => s.id === currentSong.id);
+        if (songIndex > -1) {
+            if (isCorrect) library[songIndex].correct++;
+            else library[songIndex].incorrect++;
+            saveLibrary();
+        }
+        nextCard();
+    }
+
+    // --- LOGICA STATISTICHE ---
+    function renderStats() {
+        const tbody = document.getElementById('stats-body');
+        tbody.innerHTML = '';
+        if (library.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-sec);">Nessun dato.</td></tr>';
+            return;
+        }
+
+        const sorted = [...library].sort((a, b) => b.incorrect - a.incorrect);
+        
+        sorted.forEach(s => {
+            const total = s.correct + s.incorrect;
+            const perc = total > 0 ? Math.round((s.correct / total) * 100) : 0;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${s.title}</strong><br><small>${s.artist} (${s.year})</small></td>
+                <td style="color: var(--primary);">${s.correct}</td>
+                <td style="color: #e91429;">${s.incorrect}</td>
+                <td>${total > 0 ? perc + '%' : '-'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+</script>
+</body>
+</html>
