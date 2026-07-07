@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Flashcards App - V3</title>
+    <title>Music Flashcards App - V4</title>
     <style>
         :root {
             --primary: #1DB954;
@@ -21,7 +21,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            overflow-x: hidden; /* Evita lo scroll orizzontale durante lo swipe */
+            overflow-x: hidden;
         }
         .container {
             width: 100%;
@@ -92,7 +92,6 @@
             cursor: pointer;
             user-select: none;
             border: 2px solid transparent;
-            /* touch-action: none impedisce al browser di scrollare la pagina quando fai swipe */
             touch-action: none; 
             transition: transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
             box-sizing: border-box;
@@ -213,7 +212,7 @@
     let startX = 0;
     let currentX = 0;
     let isDragging = false;
-    const SWIPE_THRESHOLD = 100; // Pixel necessari per confermare lo swipe
+    const SWIPE_THRESHOLD = 100;
 
     // Gestione Eventi Touch (Mobile)
     flashcardEl.addEventListener('touchstart', touchStart);
@@ -225,11 +224,9 @@
     document.addEventListener('mousemove', touchMove);
     document.addEventListener('mouseup', touchEnd);
 
-    // Click standard per girare la carta (solo se non è già girata)
+    // Click standard per girare la carta
     flashcardEl.addEventListener('click', (e) => {
         if (!currentSong || isFlipped) return;
-        
-        // Evita che un micro-trascinamento venga contato come click
         if (Math.abs(currentX - startX) > 5) return; 
         
         isFlipped = true;
@@ -243,12 +240,11 @@
     }
 
     function touchStart(event) {
-        // Lo swipe è permesso solo se la carta è già girata
         if (!currentSong || !isFlipped) return; 
         isDragging = true;
         startX = getPositionX(event);
         currentX = startX;
-        flashcardEl.style.transition = 'none'; // Rimuove animazioni durante il drag per massima fluidità
+        flashcardEl.style.transition = 'none';
     }
 
     function touchMove(event) {
@@ -256,11 +252,9 @@
         currentX = getPositionX(event);
         const diffX = currentX - startX;
         
-        // Calcola rotazione e spostamento
         const rotate = diffX * 0.05;
         flashcardEl.style.transform = `translateX(${diffX}px) rotate(${rotate}deg)`;
         
-        // Feedback visivo sul bordo
         if (diffX > 50) {
             flashcardEl.style.borderColor = "var(--primary)";
         } else if (diffX < -50) {
@@ -278,24 +272,20 @@
         flashcardEl.style.transition = 'transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease';
 
         if (diffX > SWIPE_THRESHOLD) {
-            // Swipe a destra: Indovinato
             flashcardEl.style.transform = `translateX(${window.innerWidth}px) rotate(30deg)`;
             flashcardEl.style.opacity = '0';
             setTimeout(() => evaluateAnswer(true), 300);
         } else if (diffX < -SWIPE_THRESHOLD) {
-            // Swipe a sinistra: Sbagliato
             flashcardEl.style.transform = `translateX(-${window.innerWidth}px) rotate(-30deg)`;
             flashcardEl.style.opacity = '0';
             setTimeout(() => evaluateAnswer(false), 300);
         } else {
-            // Ritorna al centro se lo swipe non è sufficiente
             flashcardEl.style.transform = 'translateX(0) rotate(0)';
             flashcardEl.style.borderColor = "transparent";
         }
     }
 
-
-    // --- FUNZIONI DI BASE (SALVATAGGIO E TAB) ---
+    // --- FUNZIONI DI BASE ---
     function saveLibrary() {
         localStorage.setItem('music_library', JSON.stringify(library));
     }
@@ -315,13 +305,15 @@
         const lines = text.split('\n');
         let count = 0;
         
-        lines.forEach(line => {
+        // Aggiunto l'indice per garantire l'univocità dell'ID assieme al timestamp e Math.random
+        lines.forEach((line, index) => {
             const parts = line.split(';').map(p => p.trim());
             if (parts.length >= 3) {
                 const exists = library.find(s => s.title.toLowerCase() === parts[0].toLowerCase() && s.artist.toLowerCase() === parts[1].toLowerCase());
                 if (!exists) {
                     library.push({
-                        id: Date.now() + Math.random(),
+                        // Nuovo generatore ID univoco basato su stringhe
+                        id: Date.now().toString(36) + '-' + index + '-' + Math.random().toString(36).slice(2),
                         title: parts[0],
                         artist: parts[1],
                         year: parseInt(parts[2]) || 0,
@@ -400,16 +392,13 @@
     }
 
     function nextCard() {
-        // Reset degli stili della carta dopo lo swipe
         flashcardEl.style.transition = 'none';
         flashcardEl.style.transform = 'translateX(0) rotate(0)';
         flashcardEl.style.opacity = '1';
         flashcardEl.style.borderColor = "transparent";
         
-        // Forza il reflow per applicare subito i reset senza animazioni
         void flashcardEl.offsetWidth; 
         
-        // Riattiva le transizioni normali
         flashcardEl.style.transition = 'transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease';
 
         if (sessionPool.length === 0) {
@@ -450,7 +439,6 @@
         document.getElementById('fc-swipe-hint').style.display = 'none';
         flashcardEl.style.display = 'flex';
         
-        // Resetta le coordinate di inizio per evitare falsi swipe al cambio carta
         startX = 0;
         currentX = 0;
     }
